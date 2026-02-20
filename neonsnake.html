@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Snake Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { filter: drop-shadow(0 0 5px currentColor); }
+            50% { filter: drop-shadow(0 0 15px currentColor); }
+        }
+
+        @keyframes bounce-score {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); color: #fff; }
+        }
+
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #0f172a; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            font-family: 'Inter', sans-serif;
+        }
+
+        canvas { 
+            border: 4px solid #1e293b; 
+            border-radius: 12px; 
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5); 
+            background-color: #020617;
+            transition: transform 0.3s ease;
+        }
+
+        .neon-text {
+            text-shadow: 0 0 10px currentColor;
+        }
+
+        .menu-overlay {
+            background: rgba(2, 6, 23, 0.9);
+            backdrop-filter: blur(12px);
+            transition: opacity 0.4s ease, visibility 0.4s;
+        }
+
+        .animate-in {
+            animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .score-bounce {
+            animation: bounce-score 0.3s ease-out;
+        }
+
+        .skin-card, .mode-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .skin-card:hover, .mode-btn:not(.active):hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .skin-card.active, .mode-btn.active {
+            border-color: inherit;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+        }
+
+        #gameTitle {
+            animation: pulse-glow 3s infinite ease-in-out;
+        }
+
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body onclick="AudioEngine.init()">
+
+    <div class="flex flex-col items-center gap-6">
+        <!-- Header -->
+        <div class="flex justify-between w-full px-2 items-end">
+            <div class="flex items-center gap-4">
+                <div class="transition-all duration-500">
+                    <h1 id="gameTitle" class="text-emerald-500 text-3xl font-black neon-text italic tracking-tighter">NEON SNAKE</h1>
+                    <div id="modeLabel" class="text-[10px] text-emerald-500/50 uppercase font-bold tracking-[0.2em] transition-colors duration-500">CLASSIC MODE</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleMute(event)" id="muteBtn" class="bg-slate-800/50 p-2 rounded-lg text-gray-400 hover:text-white transition-all hover:bg-slate-700 btn-press">
+                        <svg id="soundOnIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                        <svg id="soundOffIcon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                    </button>
+                    <button onclick="togglePause()" id="pauseBtn" class="hidden bg-slate-800/50 p-2 rounded-lg text-gray-400 hover:text-white transition-all hover:bg-slate-700 btn-press">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="text-gray-400 text-xs uppercase font-bold tracking-widest">Score</div>
+                <div id="score" class="text-white font-mono text-3xl transition-all">000</div>
+            </div>
+        </div>
+
+        <div class="relative group">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- Main Menu -->
+            <div id="mainMenu" class="absolute inset-0 menu-overlay flex flex-col items-center justify-center rounded-lg z-10">
+                <div class="animate-in flex flex-col items-center">
+                    <h2 class="text-white text-5xl font-black mb-6 italic tracking-tighter neon-text text-emerald-500">READY?</h2>
+                    
+                    <div class="flex gap-2 mb-8 bg-slate-900/50 p-1 rounded-xl border border-slate-800">
+                        <button onclick="setMode('classic')" id="btn-classic" class="mode-btn active px-4 py-2 rounded-lg text-xs font-bold text-white uppercase tracking-wider">Classic</button>
+                        <button onclick="setMode('speedy')" id="btn-speedy" class="mode-btn px-4 py-2 rounded-lg text-xs font-bold text-white uppercase tracking-wider">Speedy</button>
+                        <button onclick="setMode('infinite')" id="btn-infinite" class="mode-btn px-4 py-2 rounded-lg text-xs font-bold text-white uppercase tracking-wider">Infinite</button>
+                    </div>
+
+                    <div class="flex flex-col gap-4 w-48">
+                        <button onclick="startGame()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-full transition-all shadow-lg shadow-emerald-500/40 hover:scale-105 btn-press">
+                            START GAME
+                        </button>
+                        <button onclick="toggleCustomize(true)" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-full transition-all btn-press">
+                            SKINS
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pause Menu -->
+            <div id="pauseMenu" class="hidden absolute inset-0 menu-overlay flex flex-col items-center justify-center rounded-lg z-40">
+                <div class="animate-in flex flex-col items-center">
+                    <h2 class="text-white text-5xl font-black mb-8 italic tracking-tighter neon-text text-emerald-500">PAUSED</h2>
+                    <div class="flex flex-col gap-4 w-48">
+                        <button onclick="togglePause()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-full transition-all shadow-lg shadow-emerald-500/20 hover:scale-105 btn-press">
+                            RESUME
+                        </button>
+                        <button onclick="backToMenuFromPause()" class="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-full transition-all btn-press">
+                            MAIN MENU
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customize Menu -->
+            <div id="customizeMenu" class="hidden absolute inset-0 menu-overlay flex flex-col items-center justify-center rounded-lg z-20 p-6">
+                <div class="animate-in flex flex-col items-center w-full">
+                    <h2 class="text-white text-2xl font-black mb-6 uppercase tracking-widest">Select Skin</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-8 w-full max-w-xs" id="skinGrid"></div>
+                    <button onclick="toggleCustomize(false)" class="bg-emerald-500 text-slate-950 font-bold py-2 px-8 rounded-full hover:scale-105 transition-transform btn-press">
+                        SAVE & BACK
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Game Over Overlay -->
+            <div id="gameOverScreen" class="hidden absolute inset-0 menu-overlay flex flex-col items-center justify-center rounded-lg border-2 border-emerald-500/50 z-30">
+                <div class="animate-in flex flex-col items-center">
+                    <h2 class="text-white text-4xl font-black mb-2">CRASHED!</h2>
+                    <p id="finalScore" class="text-emerald-400 mb-6 font-mono text-xl">Final Score: 0</p>
+                    <div class="flex flex-col gap-3 w-48">
+                        <button onclick="resetGame()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-full transition-all shadow-lg shadow-emerald-500/20 hover:scale-105 btn-press">
+                            RETRY
+                        </button>
+                        <button onclick="backToMenu()" class="text-gray-400 hover:text-white font-bold py-2 transition-colors btn-press">
+                            MAIN MENU
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex gap-8 text-gray-500 text-sm font-medium">
+            <div class="flex items-center gap-2">
+                <span class="bg-slate-800 px-2 py-1 rounded text-gray-300">ARROWS</span> Move
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="bg-slate-800 px-2 py-1 rounded text-gray-300 italic font-bold">P</span> Pause
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="currentSkinLabel" class="text-emerald-500/80 transition-colors duration-500">Skin: Emerald</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Audio Engine ---
+        const AudioEngine = (() => {
+            let audioCtx = null;
+            let isMuted = false;
+
+            const init = () => { 
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            };
+
+            const playTone = (freq, type, duration, volume = 0.1, slide = 0) => {
+                if (isMuted) return;
+                init();
+                if (!audioCtx) return;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                if (slide) osc.frequency.exponentialRampToValueAtTime(slide, audioCtx.currentTime + duration);
+                
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            };
+
+            return {
+                init,
+                toggleMute: () => { isMuted = !isMuted; return isMuted; },
+                click: () => playTone(600, 'sine', 0.05, 0.05),
+                select: () => playTone(800, 'square', 0.1, 0.03, 1200),
+                eat: () => playTone(400, 'triangle', 0.15, 0.1, 800),
+                crash: () => { 
+                    playTone(150, 'sawtooth', 0.4, 0.2, 40); 
+                    setTimeout(() => playTone(60, 'square', 0.2, 0.1), 50); 
+                },
+                start: () => playTone(500, 'sine', 0.3, 0.1, 1000)
+            };
+        })();
+
+        // --- Game Setup ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const mainMenu = document.getElementById('mainMenu');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const customizeMenu = document.getElementById('customizeMenu');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreEl = document.getElementById('finalScore');
+        const skinGrid = document.getElementById('skinGrid');
+        const currentSkinLabel = document.getElementById('currentSkinLabel');
+        const modeLabel = document.getElementById('modeLabel');
+        const muteBtn = document.getElementById('muteBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+
+        const GRID_SIZE = 20;
+        const TILE_COUNT = 20;
+        canvas.width = GRID_SIZE * TILE_COUNT;
+        canvas.height = GRID_SIZE * TILE_COUNT;
+
+        const SKINS = [
+            { id: 'emerald', name: 'Emerald', head: '#10b981', body: '#059669', glow: '#10b981' },
+            { id: 'cyber', name: 'Cyberpunk', head: '#f472b6', body: '#06b6d4', glow: '#f472b6' },
+            { id: 'gold', name: 'Midas', head: '#fbbf24', body: '#b45309', glow: '#fbbf24' },
+            { id: 'ghost', name: 'Ghost', head: '#f8fafc', body: 'rgba(248, 250, 252, 0.3)', glow: '#ffffff' }
+        ];
+
+        const MODES = {
+            classic: { name: 'Classic', speed: 130, wrap: false },
+            speedy: { name: 'Speedy', speed: 60, wrap: false },
+            infinite: { name: 'Infinite', speed: 100, wrap: true }
+        };
+
+        let snake = [];
+        let food = { x: 5, y: 5 };
+        let dx = 1, dy = 0;
+        let nextDx = 1, nextDy = 0;
+        let score = 0;
+        let gameActive = false;
+        let isPaused = false;
+        let gameLoopTimeout;
+        let currentSkin = SKINS[0];
+        let currentMode = 'classic';
+        let pulsePhase = 0;
+
+        function toggleMute(e) {
+            if (e) e.stopPropagation();
+            const muted = AudioEngine.toggleMute();
+            document.getElementById('soundOnIcon').classList.toggle('hidden', muted);
+            document.getElementById('soundOffIcon').classList.toggle('hidden', !muted);
+        }
+
+        function togglePause() {
+            if (!gameActive) return;
+            AudioEngine.click();
+            isPaused = !isPaused;
+            pauseMenu.classList.toggle('hidden', !isPaused);
+            if (!isPaused) {
+                gameLoop();
+            }
+        }
+
+        function initSkins() {
+            skinGrid.innerHTML = SKINS.map(skin => `
+                <div onclick="selectSkin('${skin.id}')" id="skin-${skin.id}" 
+                     class="skin-card border-2 border-slate-700 p-3 rounded-xl flex flex-col items-center gap-2 ${currentSkin.id === skin.id ? 'active' : ''}"
+                     style="${currentSkin.id === skin.id ? `border-color: ${skin.head};` : ''}">
+                    <div class="w-8 h-8 rounded" style="background: ${skin.head}; box-shadow: 0 0 10px ${skin.glow}"></div>
+                    <span class="text-white text-[10px] font-bold uppercase tracking-tighter">${skin.name}</span>
+                </div>
+            `).join('');
+        }
+
+        function setMode(modeId) {
+            AudioEngine.click();
+            currentMode = modeId;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${modeId}`).classList.add('active');
+            modeLabel.textContent = `${MODES[modeId].name} Mode`;
+        }
+
+        function selectSkin(id) {
+            AudioEngine.select();
+            currentSkin = SKINS.find(s => s.id === id);
+            
+            document.querySelectorAll('.skin-card').forEach(el => {
+                el.classList.remove('active');
+                el.style.borderColor = '';
+            });
+            const activeCard = document.getElementById(`skin-${id}`);
+            activeCard.classList.add('active');
+            activeCard.style.borderColor = currentSkin.head;
+            
+            currentSkinLabel.textContent = `Skin: ${currentSkin.name}`;
+            currentSkinLabel.style.color = currentSkin.head;
+            
+            const title = document.getElementById('gameTitle');
+            title.style.color = currentSkin.head;
+            modeLabel.style.color = currentSkin.head;
+            
+            draw(); 
+        }
+
+        function toggleCustomize(show) {
+            AudioEngine.click();
+            if(show) {
+                customizeMenu.classList.remove('hidden');
+            } else {
+                customizeMenu.classList.add('hidden');
+            }
+        }
+
+        function startGame() {
+            AudioEngine.start();
+            mainMenu.style.opacity = '0';
+            setTimeout(() => {
+                mainMenu.classList.add('hidden');
+                mainMenu.style.opacity = '1';
+                resetGame();
+            }, 300);
+        }
+
+        function backToMenu() {
+            AudioEngine.click();
+            gameOverScreen.classList.add('hidden');
+            mainMenu.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+            gameActive = false;
+            isPaused = false;
+        }
+
+        function backToMenuFromPause() {
+            pauseMenu.classList.add('hidden');
+            backToMenu();
+        }
+
+        function initSnake() {
+            snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+            dx = 1; dy = 0; nextDx = 1; nextDy = 0;
+        }
+
+        function spawnFood() {
+            food = { x: Math.floor(Math.random() * TILE_COUNT), y: Math.floor(Math.random() * TILE_COUNT) };
+            for (let part of snake) { if (part.x === food.x && part.y === food.y) return spawnFood(); }
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreEl.textContent = "000";
+            gameActive = true;
+            isPaused = false;
+            gameOverScreen.classList.add('hidden');
+            pauseMenu.classList.add('hidden');
+            pauseBtn.classList.remove('hidden');
+            initSnake();
+            spawnFood();
+            if (gameLoopTimeout) clearTimeout(gameLoopTimeout);
+            gameLoop();
+        }
+
+        window.addEventListener('keydown', (e) => {
+            AudioEngine.init();
+
+            // Toggle pause on Escape or P
+            if (e.key.toLowerCase() === 'p' || e.key === 'Escape') {
+                if (gameActive) togglePause();
+                return;
+            }
+
+            if (e.code === 'Space' && !gameActive && mainMenu.classList.contains('hidden')) {
+                resetGame();
+                return;
+            }
+
+            if (isPaused) return;
+
+            switch(e.key) {
+                case 'ArrowUp':    if(dy === 0) { nextDx = 0; nextDy = -1; } break;
+                case 'ArrowDown':  if(dy === 0) { nextDx = 0; nextDy = 1; } break;
+                case 'ArrowLeft':  if(dx === 0) { nextDx = -1; nextDy = 0; } break;
+                case 'ArrowRight': if(dx === 0) { nextDx = 1; nextDy = 0; } break;
+            }
+        });
+
+        function update() {
+            if (!gameActive || isPaused) return;
+            dx = nextDx; dy = nextDy;
+            const mode = MODES[currentMode];
+            let headX = snake[0].x + dx;
+            let headY = snake[0].y + dy;
+
+            if (mode.wrap) {
+                if (headX < 0) headX = TILE_COUNT - 1;
+                if (headX >= TILE_COUNT) headX = 0;
+                if (headY < 0) headY = TILE_COUNT - 1;
+                if (headY >= TILE_COUNT) headY = 0;
+            } else {
+                if (headX < 0 || headX >= TILE_COUNT || headY < 0 || headY >= TILE_COUNT) return endGame();
+            }
+
+            const head = { x: headX, y: headY };
+            for (let part of snake) { if (part.x === head.x && part.y === head.y) return endGame(); }
+
+            snake.unshift(head);
+            if (head.x === food.x && head.y === food.y) {
+                AudioEngine.eat();
+                score += 10;
+                scoreEl.textContent = score.toString().padStart(3, '0');
+                scoreEl.classList.remove('score-bounce');
+                void scoreEl.offsetWidth; 
+                scoreEl.classList.add('score-bounce');
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function endGame() {
+            AudioEngine.crash();
+            gameActive = false;
+            isPaused = false;
+            pauseBtn.classList.add('hidden');
+            finalScoreEl.textContent = `Final Score: ${score}`;
+            gameOverScreen.classList.remove('hidden');
+            canvas.style.transform = 'scale(0.98)';
+            setTimeout(() => canvas.style.transform = 'scale(1)', 100);
+        }
+
+        function draw() {
+            ctx.fillStyle = '#020617';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1;
+            for(let i = 0; i <= TILE_COUNT; i++) {
+                ctx.beginPath(); ctx.moveTo(i * GRID_SIZE, 0); ctx.lineTo(i * GRID_SIZE, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i * GRID_SIZE); ctx.lineTo(canvas.width, i * GRID_SIZE); ctx.stroke();
+            }
+
+            pulsePhase += 0.15;
+            const foodSizeBoost = Math.sin(pulsePhase) * 2;
+
+            ctx.shadowBlur = 15 + foodSizeBoost;
+            ctx.shadowColor = '#ef4444';
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc((food.x * GRID_SIZE) + GRID_SIZE/2, (food.y * GRID_SIZE) + GRID_SIZE/2, (GRID_SIZE/3) + (foodSizeBoost/2), 0, Math.PI * 2);
+            ctx.fill();
+
+            snake.forEach((part, index) => {
+                const isHead = index === 0;
+                const headGlow = isHead ? (20 + Math.sin(pulsePhase * 2) * 5) : 5;
+                
+                ctx.shadowBlur = headGlow;
+                ctx.shadowColor = currentSkin.glow;
+                ctx.fillStyle = isHead ? currentSkin.head : currentSkin.body;
+                
+                const x = part.x * GRID_SIZE + 2;
+                const y = part.y * GRID_SIZE + 2;
+                const size = GRID_SIZE - 4;
+                
+                ctx.beginPath();
+                ctx.roundRect(x, y, size, size, isHead ? 6 : 4);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        function gameLoop() {
+            if (!gameActive || isPaused) return;
+            update();
+            draw();
+            const mode = MODES[currentMode];
+            const ramp = currentMode === 'speedy' ? 0 : Math.floor(score / 40) * 10;
+            const speed = Math.max(40, mode.speed - ramp);
+            gameLoopTimeout = setTimeout(gameLoop, speed);
+        }
+
+        initSkins();
+        draw();
+    </script>
+</body>
+</html>
